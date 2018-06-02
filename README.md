@@ -46,3 +46,15 @@ dep ensure -v
 go run cmd/kubeadmExtend/main.go
 systemctl start docker && systemctl start kubelet
 ```
+
+```
+NAME                                            READY     STATUS    RESTARTS   AGE
+coredns-7997f8864c-dsqtc                        1/1       Running   1          6y
+coredns-7997f8864c-fhkh2                        1/1       Running   1          6y
+etcd-localhost.localdomain                      1/1       Running   2          6y
+kube-apiserver-localhost.localdomain            1/1       Running   2          6y
+kube-controller-manager-localhost.localdomain   1/1       Running   2          6y
+kube-flannel-ds-z9hd8                           1/1       Running   2          6y
+kube-proxy-88f6q                                1/1       Running   1          6y
+kube-scheduler-localhost.localdomain            1/1       Running   2          6y
+```
