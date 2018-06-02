@@ -9,6 +9,7 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
+	"os"
 	"path"
 	"time"
 
@@ -24,6 +25,8 @@ var (
 	caCert         *x509.Certificate
 	caFrontKey     *rsa.PrivateKey
 	caFrontCert    *x509.Certificate
+	caEtcdKey      *rsa.PrivateKey
+	caEtcdCert     *x509.Certificate
 )
 
 func init() {
@@ -40,13 +43,98 @@ func readCA() {
 	glog.Info("Main Init...")
 	caKeyFilePath := path.Join(KubernetesPath, "pki", "ca.key")
 	caCertFilePath := path.Join(KubernetesPath, "pki", "ca.crt")
+	caEtcdKeyFilePath := path.Join(KubernetesPath, "pki", "etcd", "ca.key")
+	caEtcdCertFilePath := path.Join(KubernetesPath, "pki", "etcd", "ca.crt")
 	caFrontKeyFilePath := path.Join(KubernetesPath, "pki", "front-proxy-ca.key")
 	caFrontCertFilePath := path.Join(KubernetesPath, "pki", "front-proxy-ca.crt")
 
 	caKey = tools.ReadKeyFile(caKeyFilePath)
 	caCert = tools.ReadCertFile(caCertFilePath)
-	caFrontKey = tools.ReadKeyFile(caFrontKeyFilePath)
-	caFrontCert = tools.ReadCertFile(caFrontCertFilePath)
+
+	if _, err := os.Stat(caFrontKeyFilePath); err == nil {
+		caFrontKey = tools.ReadKeyFile(caFrontKeyFilePath)
+		caFrontCert = tools.ReadCertFile(caFrontCertFilePath)
+	}
+
+	if _, err := os.Stat(caEtcdKeyFilePath); err == nil {
+		caEtcdKey = tools.ReadKeyFile(caEtcdKeyFilePath)
+		caEtcdCert = tools.ReadCertFile(caEtcdCertFilePath)
+	}
+
+}
+
+func frontCertUpdate() {
+	if caFrontKey == nil || caFrontCert == nil {
+		return
+	}
+
+	for _, value := range config.FrontFileBaseNames {
+		keyFilePath := path.Join(KubernetesPath, "pki", fmt.Sprint(value, ".key"))
+		certFilePath := path.Join(KubernetesPath, "pki", fmt.Sprint(value, ".crt"))
+
+		_, err1 := os.Stat(keyFilePath)
+		_, err2 := os.Stat(certFilePath)
+
+		if err1 != nil || err2 != nil {
+			return
+		}
+
+		key := tools.ReadKeyFile(keyFilePath)
+		cert := tools.ReadCertFile(certFilePath)
+		tools.VerifyFunc(caFrontCert, cert)
+		cert.NotAfter = cert.NotBefore.Add(10 * 365 * 24 * time.Hour)
+
+		glog.Infof("Create... Cert: %+v", value)
+		newCart, err := x509.CreateCertificate(rand.Reader, cert, caFrontCert, &key.PublicKey, caFrontKey)
+		tools.CheckError(err)
+
+		glog.Infof("Save...   Cert: %+v", value)
+		newCartByte := pem.EncodeToMemory(
+			&pem.Block{
+				Type:  "CERTIFICATE",
+				Bytes: newCart})
+		err = ioutil.WriteFile(certFilePath, newCartByte, 0644)
+		tools.CheckError(err)
+	}
+	glog.Infof("End...    File: %+v", config.FrontFileBaseNames)
+
+}
+
+func etcdCertUpdate() {
+	if caEtcdKey == nil || caEtcdCert == nil {
+		return
+	}
+
+	for _, value := range config.EtcdFileBaseNames {
+		keyFilePath := path.Join(KubernetesPath, "pki", fmt.Sprint(value, ".key"))
+		certFilePath := path.Join(KubernetesPath, "pki", fmt.Sprint(value, ".crt"))
+
+		_, err1 := os.Stat(keyFilePath)
+		_, err2 := os.Stat(certFilePath)
+
+		if err1 != nil || err2 != nil {
+			return
+		}
+
+		key := tools.ReadKeyFile(keyFilePath)
+		cert := tools.ReadCertFile(certFilePath)
+		tools.VerifyFunc(caEtcdCert, cert)
+		cert.NotAfter = cert.NotBefore.Add(10 * 365 * 24 * time.Hour)
+
+		glog.Infof("Create... Cert: %+v", value)
+		newCart, err := x509.CreateCertificate(rand.Reader, cert, caEtcdCert, &key.PublicKey, caEtcdKey)
+		tools.CheckError(err)
+
+		glog.Infof("Save...   Cert: %+v", value)
+		newCartByte := pem.EncodeToMemory(
+			&pem.Block{
+				Type:  "CERTIFICATE",
+				Bytes: newCart})
+		err = ioutil.WriteFile(certFilePath, newCartByte, 0644)
+		tools.CheckError(err)
+	}
+	glog.Infof("End...    File: %+v", config.EtcdFileBaseNames)
+
 }
 
 func kubeAPICertUpdate() {
@@ -101,5 +189,7 @@ func kubeAPICertUpdate() {
 
 func main() {
 	readCA()
+	etcdCertUpdate()
+	frontCertUpdate()
 	kubeAPICertUpdate()
 }
