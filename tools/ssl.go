@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"crypto/ecdsa"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
@@ -8,6 +9,18 @@ import (
 
 	"github.com/golang/glog"
 )
+
+// ReadECKeyByte Is Func
+func ReadECKeyByte(data []byte) (key *ecdsa.PrivateKey) {
+	block, _ := pem.Decode(data)
+	if block == nil {
+		glog.Fatalln("failed to parse certificate PEM")
+	}
+	key, err := x509.ParseECPrivateKey(block.Bytes)
+	CheckError(err)
+	return
+
+}
 
 // ReadKeyByte Is Func
 func ReadKeyByte(data []byte) (key *rsa.PrivateKey) {

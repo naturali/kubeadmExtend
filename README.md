@@ -58,3 +58,12 @@ kube-flannel-ds-z9hd8                           1/1       Running   2          6
 kube-proxy-88f6q                                1/1       Running   1          6y
 kube-scheduler-localhost.localdomain            1/1       Running   2          6y
 ```
+
+```
+go run cmd/kubeadmExtend/main.go \
+    --CaKeyBySSH=k8s_master:/etc/kubernetes/pki/ca.key \
+    --CaCertBySSH=k8s_master:/etc/kubernetes/pki/ca.crt \
+    --kubectlConfigBySSH=k8s_node01:/etc/kubernetes/kubelet.conf
+
+ssh k8s_node01 "systemctl restart kubelet"
+```

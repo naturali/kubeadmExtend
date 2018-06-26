@@ -1,7 +1,6 @@
 package tools
 
 import (
-	"errors"
 	"io/ioutil"
 
 	yaml "gopkg.in/yaml.v2"
@@ -59,16 +58,16 @@ func SaveYamlFileByKubeConf(path string, data KubeConf) {
 
 // GetKeyByKubeConf Is Func
 func GetKeyByKubeConf(config KubeConf) string {
-	if len(config.Users) != 1 {
-		CheckError(errors.New("In Kubernetes Yaml Config File, Len(Users) != 1"))
-	}
+	// if len(config.Users) != 1 {
+	// 	CheckError(errors.New("In Kubernetes Yaml Config File, Len(Users) != 1"))
+	// }
 	return config.Users[0].User.ClientKeyData
 }
 
 // GetCertByKubeConf Is Func
 func GetCertByKubeConf(config KubeConf) string {
-	if len(config.Users) != 1 {
-		CheckError(errors.New("In Kubernetes Yaml Config File, Len(Users) != 1"))
-	}
+	// if len(config.Users) != 1 {
+	// 	CheckError(errors.New("In Kubernetes Yaml Config File, Len(Users) != 1"))
+	// }
 	return config.Users[0].User.ClientCertificateData
 }

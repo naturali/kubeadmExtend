@@ -9,6 +9,7 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
+	mRand "math/rand"
 	"os"
 	"path"
 	"time"
@@ -27,12 +28,23 @@ var (
 	caFrontCert    *x509.Certificate
 	caEtcdKey      *rsa.PrivateKey
 	caEtcdCert     *x509.Certificate
+
+	caKeyBySSH         string
+	caCertBySSH        string
+	kubectlConfigBySSH string
+
+	CommandSting string
 )
 
 func init() {
 	flag.StringVar(&KubernetesPath, "KubernetesConfig", "/etc/kubernetes/", "Kubernetes Config Path.")
+	flag.StringVar(&caKeyBySSH, "CaKeyBySSH", "", "For Example: k8s-master:/etc/kubernetes/pki/ca.key")
+	flag.StringVar(&caCertBySSH, "CaCertBySSH", "", "For Example: k8s-master:/etc/kubernetes/pki/ca.crt")
+	flag.StringVar(&kubectlConfigBySSH, "kubectlConfigBySSH", "", "For Example: k8s-node:/etc/kubernetes/kubelet.conf")
 	flag.Lookup("stderrthreshold").Value.Set("info")
 	flag.Parse()
+
+	CommandSting = `scp -oStrictHostKeyChecking=no %v %v`
 }
 
 func exit() {
@@ -187,9 +199,68 @@ func kubeAPICertUpdate() {
 	glog.Infof("End...    File: %+v", config.ConfigFileBaseNames)
 }
 
+func random() int {
+	return mRand.New(mRand.NewSource(time.Now().UnixNano())).Int()
+}
+
+func updateMinion() {
+	caKeyTmp := fmt.Sprintf("/tmp/tmptmp-%v.%v", random(), random())
+	caCertTmp := fmt.Sprintf("/tmp/tmptmp-%v.%v", random(), random())
+	kubectlConfigTmp := fmt.Sprintf("/tmp/tmptmp-%v.%v", random(), random())
+
+	workMap := map[string]string{
+		caKeyBySSH:         caKeyTmp,
+		caCertBySSH:        caCertTmp,
+		kubectlConfigBySSH: kubectlConfigTmp,
+	}
+
+	for sf, lf := range workMap {
+		cmd := fmt.Sprintf(CommandSting, sf, lf)
+		_, err := tools.Command(cmd)
+		if err != nil {
+			glog.Fatalf("%v: %v", cmd, err.Error())
+		}
+	}
+
+	caKey = tools.ReadKeyFile(caKeyTmp)
+	caCert = tools.ReadCertFile(caCertTmp)
+	kubectlConfig := tools.ReadYamlFileByKubeConf(kubectlConfigTmp)
+
+	key := tools.ReadECKeyByte(tools.UnBase64(tools.GetKeyByKubeConf(kubectlConfig)))
+	cert := tools.ReadCertByte(tools.UnBase64(tools.GetCertByKubeConf(kubectlConfig)))
+	tools.VerifyFunc(caCert, cert)
+	cert.NotAfter = cert.NotBefore.Add(10 * 365 * 24 * time.Hour)
+
+	newCart, err := x509.CreateCertificate(rand.Reader, cert, caCert, &key.PublicKey, caKey)
+	tools.CheckError(err)
+
+	newCartByte := pem.EncodeToMemory(
+		&pem.Block{
+			Type:  "CERTIFICATE",
+			Bytes: newCart,
+		})
+	kubectlConfig.Users[0].User.ClientCertificateData = base64.StdEncoding.EncodeToString(newCartByte)
+	tools.SaveYamlFileByKubeConf(kubectlConfigTmp, kubectlConfig)
+
+	cmd := fmt.Sprintf(CommandSting, kubectlConfigTmp, kubectlConfigBySSH)
+	_, err = tools.Command(cmd)
+	if err != nil {
+		glog.Fatalf("%v: %v", cmd, err.Error())
+	}
+
+	for _, lf := range workMap {
+		os.Remove(lf)
+	}
+
+}
+
 func main() {
-	readCA()
-	etcdCertUpdate()
-	frontCertUpdate()
-	kubeAPICertUpdate()
+	if caKeyBySSH != "" && caCertBySSH != "" && kubectlConfigBySSH != "" {
+		updateMinion()
+	} else {
+		readCA()
+		etcdCertUpdate()
+		frontCertUpdate()
+		kubeAPICertUpdate()
+	}
 }
